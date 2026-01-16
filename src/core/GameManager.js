@@ -76,8 +76,12 @@ export class GameManager {
 
     /**
      * Initialize the game
+     * @param {HTMLElement} container - Optional container element for the renderer
      */
-    async init() {
+    async init(container = null) {
+        // Store container reference
+        this.container = container;
+        
         // Create scene
         this._setupScene();
         
@@ -198,7 +202,11 @@ export class GameManager {
         // Output encoding for correct colors
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         
-        document.getElementById('game-container').appendChild(this.renderer.domElement);
+        // Add to container
+        const targetContainer = this.container || document.getElementById('game-container');
+        if (targetContainer) {
+            targetContainer.appendChild(this.renderer.domElement);
+        }
     }
 
     _setupPostProcessing() {
@@ -751,7 +759,7 @@ export class GameManager {
      * Animation loop
      */
     animate() {
-        requestAnimationFrame(() => this.animate());
+        this.animationFrameId = requestAnimationFrame(() => this.animate());
         
         this.update();
         
@@ -785,5 +793,45 @@ export class GameManager {
      */
     start() {
         this.animate();
+    }
+
+    /**
+     * Dispose of the game and clean up resources
+     */
+    dispose() {
+        // Stop animation loop
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+        }
+
+        // Dispose managers
+        if (this.inputManager) {
+            this.inputManager.destroy();
+        }
+
+        // Dispose Three.js resources
+        if (this.renderer) {
+            this.renderer.dispose();
+            if (this.renderer.domElement.parentNode) {
+                this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+            }
+        }
+
+        if (this.scene) {
+            this.scene.traverse((object) => {
+                if (object.geometry) {
+                    object.geometry.dispose();
+                }
+                if (object.material) {
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(material => material.dispose());
+                    } else {
+                        object.material.dispose();
+                    }
+                }
+            });
+        }
+
+        console.log('Game disposed');
     }
 }

@@ -114,26 +114,27 @@ export const BUILDING_COLORS = [
 ];
 
 export const SKYSCRAPER_MODELS = [
-    'assets/buildings/skyscrapers/skyscraper_1.glb',
-    'assets/buildings/skyscrapers/skyscraper_2.glb',
-    'assets/buildings/skyscrapers/skyscraper_3.glb',
-    'assets/buildings/skyscrapers/skyscraper_4.glb'
+    '/assets/buildings/skyscrapers/skyscraper_1.glb',
+    '/assets/buildings/skyscrapers/skyscraper_2.glb',
+    '/assets/buildings/skyscrapers/skyscraper_3.glb',
+    '/assets/buildings/skyscrapers/skyscraper_4.glb'
 ];
 
 export const ANIMATION_FILES = {
-    idle: 'assets/characters/jen/Standing Idle.fbx',
-    crouch: 'assets/characters/jen/Crouch Idle.fbx',
-    skateboard: 'assets/characters/jen/Skateboarding.fbx',
-    crouchToStand: 'assets/characters/jen/Crouch To Standing.fbx',
-    standUp: 'assets/characters/jen/Standing Up.fbx',
-    falling: 'assets/characters/jen/Falling Idle.fbx',
-    fallingToLand: 'assets/characters/jen/Falling To Landing.fbx',
-    jumping: 'assets/characters/jen/Jumping.fbx'
+    idle: '/assets/characters/jen/Standing Idle.fbx',
+    crouch: '/assets/characters/jen/Crouch Idle.fbx',
+    skateboard: '/assets/characters/jen/Skateboarding.fbx',
+    crouchToStand: '/assets/characters/jen/Crouch To Standing.fbx',
+    standUp: '/assets/characters/jen/Standing Up.fbx',
+    falling: '/assets/characters/jen/Falling Idle.fbx',
+    fallingToLand: '/assets/characters/jen/Falling To Landing.fbx',
+    jumping: '/assets/characters/jen/Jumping.fbx'
 };
 
 export const ASSETS = {
-    HOVERBOARD: 'assets/objects/hoverboard.glb',
-    PIZZA_SHOP: 'assets/buildings/pizza-shop.glb'
+    HOVERBOARD: '/assets/objects/hoverboard.glb',
+    PIZZA_SHOP: '/assets/buildings/pizza-shop.glb',
+    PIZZA_BOX: '/assets/objects/pizza-box.glb'
 };
 
 // Key bindings
