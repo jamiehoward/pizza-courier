@@ -47,6 +47,13 @@ export class CityManager {
     }
 
     /**
+     * Set the atmosphere manager reference for neon/window effects
+     */
+    setAtmosphereManager(atmosphereManager) {
+        this.atmosphereManager = atmosphereManager;
+    }
+
+    /**
      * Initialize the city
      */
     init() {
@@ -114,6 +121,18 @@ export class CityManager {
                     // Add to editor if available
                     if (this.editorManager) {
                         this.editorManager.objects.push(building);
+                    }
+                    
+                    // Add atmosphere effects (windows and neon)
+                    if (this.atmosphereManager && building.mesh) {
+                        // Add emissive windows to tall buildings
+                        if (height > 10) {
+                            this.atmosphereManager.addBuildingWindows(building.mesh, height);
+                        }
+                        // Add neon signs/strips
+                        if (height > 15) {
+                            this.atmosphereManager.addBuildingNeon(building.mesh, height);
+                        }
                     }
                 }
             }

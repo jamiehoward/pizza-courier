@@ -79,6 +79,8 @@ export class EventBus {
 export const Events = {
     // Input events
     INPUT_JUMP: 'input:jump',
+    INPUT_SHOP_TOGGLE: 'input:shop:toggle',
+    INPUT_SUMMARY: 'input:summary',
     INPUT_MOVE: 'input:move',
     
     // Player events
@@ -91,6 +93,7 @@ export const Events = {
     
     // Charge/boost events
     CHARGE_FULL: 'charge:full',
+    CHARGE_THRESHOLD: 'charge:threshold',
     CHARGE_BOOST_USED: 'charge:boost:used',
     NEAR_MISS: 'near:miss',
     
@@ -102,5 +105,12 @@ export const Events = {
     DELIVERY_STARTED: 'delivery:started',
     DELIVERY_COMPLETED: 'delivery:completed',
     DELIVERY_FAILED: 'delivery:failed',
-    PIZZA_PICKUP: 'pizza:pickup'
+    DELIVERY_WARNING: 'delivery:warning',
+    PIZZA_PICKUP: 'pizza:pickup',
+    
+    // Collision events
+    PLAYER_COLLISION: 'player:collision',
+    
+    // Upgrade events
+    UPGRADE_PURCHASED: 'upgrade:purchased'
 };

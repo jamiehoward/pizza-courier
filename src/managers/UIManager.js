@@ -1,5 +1,14 @@
 // UIManager - Handles HUD updates (speed, altitude, flight energy, delivery)
 
+// Delivery type colors
+const DELIVERY_TYPE_COLORS = {
+    STANDARD: '#00ff00',
+    RUSH: '#ffaa00',
+    FRAGILE: '#ff00ff',
+    HOT: '#ff4444',
+    VIP: '#ffdd00'
+};
+
 export class UIManager {
     constructor() {
         this.speedElement = null;
@@ -11,6 +20,9 @@ export class UIManager {
         this.deliveryTimerElement = null;
         this.deliveryStatsElement = null;
         this.pickupPromptElement = null;
+        this.deliveryTypeElement = null;
+        this.deliveryCreditsElement = null;
+        this.pizzaTempElement = null;
     }
 
     init() {
@@ -23,6 +35,53 @@ export class UIManager {
         this.deliveryTimerElement = document.getElementById('delivery-timer');
         this.deliveryStatsElement = document.getElementById('delivery-stats');
         this.pickupPromptElement = document.getElementById('pickup-prompt');
+        
+        // Create delivery type display
+        this._createDeliveryTypeUI();
+    }
+
+    /**
+     * Create additional delivery type UI elements
+     */
+    _createDeliveryTypeUI() {
+        const deliveryUI = document.getElementById('delivery-ui');
+        if (!deliveryUI) return;
+        
+        // Delivery type badge
+        this.deliveryTypeElement = document.createElement('div');
+        this.deliveryTypeElement.id = 'delivery-type';
+        this.deliveryTypeElement.style.cssText = `
+            display: none;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        `;
+        deliveryUI.insertBefore(this.deliveryTypeElement, deliveryUI.firstChild);
+        
+        // Credits display
+        this.deliveryCreditsElement = document.createElement('div');
+        this.deliveryCreditsElement.id = 'delivery-credits';
+        this.deliveryCreditsElement.style.cssText = `
+            font-size: 12px;
+            color: #ffdd00;
+            margin-top: 5px;
+        `;
+        deliveryUI.appendChild(this.deliveryCreditsElement);
+        
+        // Pizza temperature bar (for HOT deliveries)
+        this.pizzaTempElement = document.createElement('div');
+        this.pizzaTempElement.id = 'pizza-temp';
+        this.pizzaTempElement.style.cssText = `
+            display: none;
+            font-size: 12px;
+            margin-top: 5px;
+        `;
+        deliveryUI.appendChild(this.pizzaTempElement);
     }
 
     /**
@@ -80,13 +139,40 @@ export class UIManager {
      * @param {Object} deliveryState - Delivery state from DeliveryManager
      */
     updateDelivery(deliveryState) {
-        const { hasActivePizza, timeRemaining, deliveriesCompleted, deliveriesFailed } = deliveryState;
+        const { 
+            hasActivePizza, 
+            timeRemaining, 
+            deliveriesCompleted, 
+            deliveriesFailed,
+            deliveryType,
+            deliveryTypeName,
+            deliveryDescription,
+            rewardMultiplier,
+            pizzaTemperature,
+            isHotDelivery,
+            totalCredits
+        } = deliveryState;
+        
+        // Update delivery type badge
+        if (this.deliveryTypeElement) {
+            if (hasActivePizza && deliveryType) {
+                const color = DELIVERY_TYPE_COLORS[deliveryType] || '#00ff00';
+                this.deliveryTypeElement.style.display = 'block';
+                this.deliveryTypeElement.style.backgroundColor = color + '33';
+                this.deliveryTypeElement.style.border = `2px solid ${color}`;
+                this.deliveryTypeElement.style.color = color;
+                this.deliveryTypeElement.innerHTML = `${deliveryTypeName} <span style="font-size:10px">(${rewardMultiplier}x)</span>`;
+            } else {
+                this.deliveryTypeElement.style.display = 'none';
+            }
+        }
         
         // Update status
         if (this.deliveryStatusElement) {
             if (hasActivePizza) {
-                this.deliveryStatusElement.textContent = 'DELIVERING...';
-                this.deliveryStatusElement.style.color = '#0f0';
+                const statusText = deliveryDescription || 'DELIVERING...';
+                this.deliveryStatusElement.textContent = statusText;
+                this.deliveryStatusElement.style.color = DELIVERY_TYPE_COLORS[deliveryType] || '#0f0';
             } else {
                 this.deliveryStatusElement.textContent = 'AWAITING PICKUP';
                 this.deliveryStatusElement.style.color = '#0ff';
@@ -111,9 +197,33 @@ export class UIManager {
             }
         }
         
-        // Update stats
+        // Update pizza temperature for HOT deliveries
+        if (this.pizzaTempElement) {
+            if (hasActivePizza && isHotDelivery) {
+                this.pizzaTempElement.style.display = 'block';
+                const tempBarLength = 10;
+                const filledBars = Math.round((pizzaTemperature / 100) * tempBarLength);
+                const emptyBars = tempBarLength - filledBars;
+                const tempBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
+                
+                // Color based on temperature
+                let tempColor = '#ff4444';
+                if (pizzaTemperature > 60) tempColor = '#ffaa00';
+                if (pizzaTemperature > 80) tempColor = '#00ff00';
+                
+                this.pizzaTempElement.innerHTML = `TEMP: <span style="color:${tempColor}">${tempBar}</span> ${Math.round(pizzaTemperature)}°`;
+            } else {
+                this.pizzaTempElement.style.display = 'none';
+            }
+        }
+        
+        // Update stats and credits
         if (this.deliveryStatsElement) {
             this.deliveryStatsElement.textContent = `DELIVERIES: ${deliveriesCompleted} | FAILED: ${deliveriesFailed}`;
+        }
+        
+        if (this.deliveryCreditsElement) {
+            this.deliveryCreditsElement.textContent = `CREDITS: ${totalCredits || 0}`;
         }
     }
 

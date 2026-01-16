@@ -73,12 +73,12 @@ export const SKY = {
 };
 
 export const EFFECTS = {
-    MAX_TRAIL_PARTICLES: 40,
+    MAX_TRAIL_PARTICLES: 20,
     GLOW_COLORS: {
         PRIMARY: 0x00ffff,
         SECONDARY: 0x00ffaa
     },
-    BURST_PARTICLE_COUNT: 20
+    BURST_PARTICLE_COUNT: 8
 };
 
 export const LIGHTING = {

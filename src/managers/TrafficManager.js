@@ -18,9 +18,9 @@ const CAR_TYPES = [
 ];
 
 const TRAFFIC_CONFIG = {
-    MAX_CARS: 120,
-    SPAWN_RADIUS: 100,      // Distance from player to spawn cars
-    DESPAWN_RADIUS: 130,    // Distance to despawn cars
+    MAX_CARS: 8,
+    SPAWN_RADIUS: 70,       // Distance from player to spawn cars
+    DESPAWN_RADIUS: 90,     // Distance to despawn cars
     MIN_SPAWN_DISTANCE: 20, // Minimum distance from player to spawn
     SPEED_MIN: 8,
     SPEED_MAX: 18,

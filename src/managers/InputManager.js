@@ -36,6 +36,17 @@ export class InputManager {
             this.eventBus.emit(Events.INPUT_JUMP);
         }
         
+        // Emit shop toggle on 'U' key
+        if (key === 'u') {
+            this.eventBus.emit(Events.INPUT_SHOP_TOGGLE);
+        }
+        
+        // Emit summary on 'Tab' key
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            this.eventBus.emit(Events.INPUT_SUMMARY);
+        }
+        
         this.keys[key] = false;
         this.keys[e.key] = false;
     }

@@ -22,13 +22,177 @@ export class EffectsManager {
         
         // Particles
         this.trailParticles = [];
+        this.particlePool = []; // Pool of reusable particles
         this.glowTexture = null;
+        
+        // Initialize particle pool
+        this._initParticlePool();
+        
+        // Speed lines
+        this.speedLines = [];
+        this.speedLineGroup = new THREE.Group();
+        this.scene.add(this.speedLineGroup);
+        this._createSpeedLines();
+        
+        // Player reference for speed lines
+        this.playerPosition = new THREE.Vector3();
+        this.playerAimYaw = 0;
+        this.currentSpeed = 0;
         
         // Listen for events
         this.eventBus.on(Events.PLAYER_FLIGHT_START, () => this.createFlightBurst());
         this.eventBus.on(Events.CHARGE_FULL, () => this.createChargeBurst());
         this.eventBus.on(Events.CHARGE_BOOST_USED, () => this.createBoostBurst());
         this.eventBus.on(Events.NEAR_MISS, (data) => this.createNearMissSparks(data.position));
+        this.eventBus.on(Events.CHARGE_THRESHOLD, (data) => this.createChargeThresholdBurst(data.threshold));
+    }
+
+    /**
+     * Initialize particle pool
+     */
+    _initParticlePool() {
+        const poolSize = EFFECTS.MAX_TRAIL_PARTICLES + 20; // Extra for bursts
+        const glowTexture = this.createGlowTexture();
+        
+        for (let i = 0; i < poolSize; i++) {
+            const material = new THREE.SpriteMaterial({
+                map: glowTexture,
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const particle = new THREE.Sprite(material);
+            particle.visible = false;
+            particle.userData.isActive = false;
+            
+            this.particlePool.push(particle);
+        }
+    }
+
+    /**
+     * Get a particle from the pool
+     */
+    _getParticleFromPool() {
+        for (const particle of this.particlePool) {
+            if (!particle.userData.isActive) {
+                particle.userData.isActive = true;
+                particle.visible = true;
+                return particle;
+            }
+        }
+        // If pool exhausted, create a new one (shouldn't happen with proper sizing)
+        const glowTexture = this.createGlowTexture();
+        const material = new THREE.SpriteMaterial({
+            map: glowTexture,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const particle = new THREE.Sprite(material);
+        particle.userData.isActive = true;
+        this.particlePool.push(particle);
+        return particle;
+    }
+
+    /**
+     * Return a particle to the pool
+     */
+    _returnParticleToPool(particle) {
+        particle.userData.isActive = false;
+        particle.visible = false;
+        particle.material.opacity = 0;
+        if (particle.parent) {
+            particle.parent.remove(particle);
+        }
+    }
+
+    /**
+     * Create speed line geometry
+     */
+    _createSpeedLines() {
+        const lineCount = 10;
+        const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending
+        });
+        
+        for (let i = 0; i < lineCount; i++) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(6); // Two points
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const line = new THREE.Line(geometry, lineMaterial.clone());
+            line.userData = {
+                offset: new THREE.Vector3(
+                    (Math.random() - 0.5) * 8,
+                    (Math.random() - 0.5) * 4 + 1,
+                    (Math.random() - 0.5) * 8
+                ),
+                length: 2 + Math.random() * 4,
+                speed: 0.8 + Math.random() * 0.4
+            };
+            
+            this.speedLines.push(line);
+            this.speedLineGroup.add(line);
+        }
+    }
+
+    /**
+     * Create particle burst when crossing charge thresholds
+     */
+    createChargeThresholdBurst(threshold) {
+        // Colors get warmer as charge increases
+        const colors = {
+            0.25: [0x00ffff, 0x00aaff], // Cyan
+            0.50: [0x00ff88, 0x88ff00], // Green-yellow
+            0.75: [0xffaa00, 0xff6600]  // Orange
+        };
+        
+        const burstColors = colors[threshold] || [0xffffff];
+        const glowTexture = this.createGlowTexture();
+        
+        // Create burst particles around the board (limit to 8)
+        for (let i = 0; i < 8; i++) {
+            const color = burstColors[Math.floor(Math.random() * burstColors.length)];
+            const particle = this._getParticleFromPool();
+            
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 0.8;
+            
+            // Ring pattern around board
+            const angle = (i / 12) * Math.PI * 2;
+            particle.userData.offsetX = Math.cos(angle) * 0.8;
+            particle.userData.offsetY = -0.2;
+            particle.userData.offsetZ = Math.sin(angle) * 0.8;
+            
+            const size = 0.3 + Math.random() * 0.3;
+            particle.scale.set(size, size, 1);
+            
+            // Burst outward
+            particle.userData.velocity = new THREE.Vector3(
+                Math.cos(angle) * 0.15,
+                0.1 + Math.random() * 0.1,
+                Math.sin(angle) * 0.15
+            );
+            particle.userData.life = 1.0;
+            particle.userData.decay = 0.05;
+            particle.userData.baseOpacity = 0.8;
+            particle.userData.baseSize = size;
+            particle.userData.isBurst = true;
+            particle.userData.isSpark = false;
+            particle.userData.needsInitialPosition = true;
+            
+            this.scene.add(particle);
+            this.trailParticles.push(particle);
+        }
     }
 
     /**
@@ -122,19 +286,14 @@ export class EffectsManager {
         const sparkColors = [0xffff00, 0xffaa00, 0xff6600, 0xffffff];
         const glowTexture = this.createGlowTexture();
         
-        // Create many small, fast-moving sparks
-        for (let i = 0; i < 20; i++) {
+        // Create many small, fast-moving sparks (limit to 8)
+        for (let i = 0; i < 8; i++) {
             const color = sparkColors[Math.floor(Math.random() * sparkColors.length)];
-            const material = new THREE.SpriteMaterial({
-                map: glowTexture,
-                color: color,
-                transparent: true,
-                opacity: 1.0,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
+            const spark = this._getParticleFromPool();
             
-            const spark = new THREE.Sprite(material);
+            // Configure spark
+            spark.material.color.setHex(color);
+            spark.material.opacity = 1.0;
             
             // Start at the near-miss position
             spark.position.set(
@@ -157,7 +316,9 @@ export class EffectsManager {
             spark.userData.baseOpacity = 1.0;
             spark.userData.baseSize = size;
             spark.userData.isSpark = true;
+            spark.userData.isBurst = false;
             spark.userData.gravity = 0.02; // Sparks fall with gravity
+            spark.userData.needsInitialPosition = false;
             
             this.scene.add(spark);
             this.trailParticles.push(spark);
@@ -189,18 +350,15 @@ export class EffectsManager {
     _createBurstParticles(colors, count, scale) {
         const glowTexture = this.createGlowTexture();
         
-        for (let i = 0; i < count; i++) {
+        // Limit burst particles to 8
+        const actualCount = Math.min(count, 8);
+        for (let i = 0; i < actualCount; i++) {
             const color = colors[Math.floor(Math.random() * colors.length)];
-            const material = new THREE.SpriteMaterial({
-                map: glowTexture,
-                color: color,
-                transparent: true,
-                opacity: 0.9,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
+            const particle = this._getParticleFromPool();
             
-            const particle = new THREE.Sprite(material);
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 0.9;
             
             particle.userData.offsetX = (Math.random() - 0.5) * 0.8;
             particle.userData.offsetY = -0.1 + (Math.random() - 0.5) * 0.4;
@@ -235,16 +393,11 @@ export class EffectsManager {
         
         for (let i = 0; i < EFFECTS.BURST_PARTICLE_COUNT; i++) {
             const color = burstColors[Math.floor(Math.random() * burstColors.length)];
-            const material = new THREE.SpriteMaterial({
-                map: glowTexture,
-                color: color,
-                transparent: true,
-                opacity: 0.8,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false
-            });
+            const particle = this._getParticleFromPool();
             
-            const particle = new THREE.Sprite(material);
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 0.8;
             
             // Will be positioned relative to player in update
             particle.userData.offsetX = (Math.random() - 0.5) * 0.5;
@@ -272,40 +425,37 @@ export class EffectsManager {
     }
 
     /**
-     * Create a trail particle
+     * Create a trail particle (uses pool)
      * @param {THREE.Vector3} position - World position
      * @param {THREE.Color} color - Particle color
      */
     createTrailParticle(position, color) {
-        const glowTexture = this.createGlowTexture();
+        // Remove old particles if at limit
+        while (this.trailParticles.length >= EFFECTS.MAX_TRAIL_PARTICLES) {
+            const old = this.trailParticles.shift();
+            this._returnParticleToPool(old);
+        }
         
-        const material = new THREE.SpriteMaterial({
-            map: glowTexture,
-            color: color,
-            transparent: true,
-            opacity: 0.4,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
+        // Get particle from pool
+        const particle = this._getParticleFromPool();
         
-        const particle = new THREE.Sprite(material);
+        // Configure particle
         particle.position.copy(position);
         const size = 0.8 + Math.random() * 0.4;
         particle.scale.set(size, size * 0.6, 1);
+        particle.material.color.copy(color);
+        particle.material.opacity = 0.4;
+        
         particle.userData.life = 1.0;
         particle.userData.decay = 0.02 + Math.random() * 0.015;
         particle.userData.baseOpacity = 0.4;
         particle.userData.baseSize = size;
+        particle.userData.isSpark = false;
+        particle.userData.isBurst = false;
+        particle.userData.velocity = null;
         
         this.scene.add(particle);
         this.trailParticles.push(particle);
-        
-        // Remove old particles
-        while (this.trailParticles.length > EFFECTS.MAX_TRAIL_PARTICLES) {
-            const old = this.trailParticles.shift();
-            this.scene.remove(old);
-            old.material.dispose();
-        }
     }
 
     /**
@@ -313,6 +463,11 @@ export class EffectsManager {
      * @param {Object} data - Update data
      */
     update({ playerPosition, aimYaw, speed, maxSpeed, isGrounded, chargeLevel, isCharged }) {
+        // Store player state for other methods
+        this.playerPosition.copy(playerPosition);
+        this.playerAimYaw = aimYaw;
+        this.currentSpeed = speed;
+        
         // Update charge state
         this.chargeLevel = chargeLevel || 0;
         this.isFullyCharged = isCharged || false;
@@ -324,6 +479,7 @@ export class EffectsManager {
         
         this.updateBoardGlow(playerPosition, speed, maxSpeed);
         this.updateTrailParticles(playerPosition, aimYaw, speed, maxSpeed);
+        this.updateSpeedLines(playerPosition, aimYaw, speed, maxSpeed);
         
         // Spawn trail particles when moving
         if (speed > PLAYER.MOVE_THRESHOLD * 2) {
@@ -349,6 +505,60 @@ export class EffectsManager {
                     );
                 }
                 this.createTrailParticle(trailPos, color);
+            }
+        }
+    }
+
+    /**
+     * Update speed lines based on velocity
+     */
+    updateSpeedLines(playerPosition, aimYaw, speed, maxSpeed) {
+        const speedRatio = Math.min(1, speed / maxSpeed);
+        const speedThreshold = 0.4; // Only show speed lines above this ratio
+        
+        // Calculate line visibility
+        const lineOpacity = speedRatio > speedThreshold 
+            ? (speedRatio - speedThreshold) / (1 - speedThreshold) * 0.6 
+            : 0;
+        
+        for (const line of this.speedLines) {
+            const material = line.material;
+            material.opacity = lineOpacity;
+            
+            if (lineOpacity > 0) {
+                const positions = line.geometry.attributes.position.array;
+                const offset = line.userData.offset;
+                const length = line.userData.length * (0.5 + speedRatio * 1.5);
+                
+                // Position relative to player, in front of camera
+                const baseX = playerPosition.x + offset.x;
+                const baseY = playerPosition.y + offset.y;
+                const baseZ = playerPosition.z + offset.z;
+                
+                // Line extends backward from direction of travel
+                const dirX = -Math.sin(aimYaw);
+                const dirZ = -Math.cos(aimYaw);
+                
+                // Start point
+                positions[0] = baseX;
+                positions[1] = baseY;
+                positions[2] = baseZ;
+                
+                // End point (extends backward)
+                positions[3] = baseX + dirX * length;
+                positions[4] = baseY;
+                positions[5] = baseZ + dirZ * length;
+                
+                line.geometry.attributes.position.needsUpdate = true;
+                
+                // Color based on charge
+                if (this.isFullyCharged) {
+                    material.color.setHex(0xffaa00);
+                } else if (this.chargeLevel > 0.5) {
+                    material.color.setHex(0x88ffff);
+                } else {
+                    material.color.setHex(0xffffff);
+                }
             }
         }
     }
@@ -473,10 +683,9 @@ export class EffectsManager {
             const size = particle.userData.baseSize * expandFactor;
             particle.scale.set(size, size * (particle.userData.isSpark ? 1 : 0.6), 1);
             
-            // Remove dead particles
+            // Remove dead particles (return to pool)
             if (particle.userData.life <= 0) {
-                this.scene.remove(particle);
-                particle.material.dispose();
+                this._returnParticleToPool(particle);
                 this.trailParticles.splice(i, 1);
             }
         }

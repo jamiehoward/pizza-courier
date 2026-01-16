@@ -16,6 +16,12 @@ import { MinimapManager } from '../managers/MinimapManager.js';
 import { TrafficManager } from '../managers/TrafficManager.js';
 import { DroneManager } from '../managers/DroneManager.js';
 import { PedestrianManager } from '../managers/PedestrianManager.js';
+import { AudioManager } from '../managers/AudioManager.js';
+import { AtmosphereManager } from '../managers/AtmosphereManager.js';
+import { DialogueManager } from '../managers/DialogueManager.js';
+import { EconomyManager } from '../managers/EconomyManager.js';
+import { SectorManager } from '../managers/SectorManager.js';
+import { UpgradeManager } from '../managers/UpgradeManager.js';
 import { Player } from '../entities/Player.js';
 import { WORLD, LIGHTING, PLAYER, SKY } from '../constants.js';
 
@@ -59,6 +65,12 @@ export class GameManager {
         this.trafficManager = null;
         this.droneManager = null;
         this.pedestrianManager = null;
+        this.audioManager = null;
+        this.atmosphereManager = null;
+        this.dialogueManager = null;
+        this.economyManager = null;
+        this.sectorManager = null;
+        this.upgradeManager = null;
         
         // Editor
         this.editorManager = null;
@@ -72,6 +84,9 @@ export class GameManager {
         
         // Game state
         this.isPaused = false;
+        
+        // Update throttling (frame counters)
+        this.updateFrameCount = 0;
     }
 
     /**
@@ -88,8 +103,8 @@ export class GameManager {
         // Create renderer
         this._setupRenderer();
         
-        // Setup post-processing
-        this._setupPostProcessing();
+        // Setup post-processing (disabled by default for performance)
+        // this._setupPostProcessing();
         
         // Setup lighting
         this._setupLighting();
@@ -98,7 +113,7 @@ export class GameManager {
         this._setupGround();
         
         // Initialize managers
-        this._initManagers();
+        await this._initManagers();
         
         // Initialize editor (async since it initializes delivery system)
         await this._initEditor();
@@ -116,9 +131,6 @@ export class GameManager {
         
         // Emit ready event
         this.eventBus.emit(Events.GAME_READY);
-        
-        // Start game loop
-        this.start();
         
         console.log('Game initialized! Press F1 to enter level editor.');
     }
@@ -349,7 +361,7 @@ export class GameManager {
         this.ground = ground;
     }
 
-    _initManagers() {
+    async _initManagers() {
         // Input
         this.inputManager = new InputManager(this.eventBus);
         this.inputManager.init();
@@ -379,6 +391,62 @@ export class GameManager {
         
         // Pedestrian system
         this.pedestrianManager = new PedestrianManager(this.scene);
+        
+        // Audio system
+        this.audioManager = new AudioManager(this.eventBus);
+        await this.audioManager.init();
+        
+        // Atmosphere system (neon, fog, windows)
+        this.atmosphereManager = new AtmosphereManager(this.scene);
+        this.atmosphereManager.init();
+        
+        // Sector system (landmarks, districts)
+        this.sectorManager = new SectorManager(this.scene);
+        this.sectorManager.setAtmosphereManager(this.atmosphereManager);
+        this.sectorManager.init();
+        
+        // Dialogue system
+        this.dialogueManager = new DialogueManager(this.eventBus);
+        this.dialogueManager.init();
+        
+        // Economy system
+        this.economyManager = new EconomyManager(this.eventBus);
+        this.economyManager.init();
+        
+        // Upgrade system
+        this.upgradeManager = new UpgradeManager(this.eventBus, this.economyManager);
+        this.upgradeManager.setGameManager(this);
+        this.upgradeManager.init();
+        
+        // Listen for dialogue events
+        this.eventBus.on('dialogue:start', () => this.pause());
+        this.eventBus.on('dialogue:end', () => this.resume());
+        
+        // Listen for summary events
+        this.eventBus.on('summary:shown', () => this.pause());
+        this.eventBus.on('summary:hidden', () => this.resume());
+        
+        // Listen for shop events
+        this.eventBus.on('shop:opened', () => this.pause());
+        this.eventBus.on('shop:closed', () => this.resume());
+        
+        // Shop toggle input
+        this.eventBus.on(Events.INPUT_SHOP_TOGGLE, () => {
+            if (this.upgradeManager) {
+                if (this.upgradeManager.isOpen()) {
+                    this.upgradeManager.closeShop();
+                } else {
+                    this.upgradeManager.openShop();
+                }
+            }
+        });
+        
+        // Summary toggle input
+        this.eventBus.on(Events.INPUT_SUMMARY, () => {
+            if (this.economyManager) {
+                this.economyManager.showSummary();
+            }
+        });
         
         // Listen for jump events (fires on spacebar release)
         this.eventBus.on(Events.INPUT_JUMP, () => {
@@ -466,6 +534,7 @@ export class GameManager {
         
         // Now that editor is ready, set it on city manager and create city
         this.cityManager.setEditorManager(this.editorManager);
+        this.cityManager.setAtmosphereManager(this.atmosphereManager);
         this.cityManager.init();
         
         // Initialize delivery system after city is created
@@ -590,16 +659,19 @@ export class GameManager {
      * Main update loop
      */
     update() {
-        const deltaTime = this.clock.getDelta();
+        const rawDeltaTime = this.clock.getDelta();
         
         // Update editor if in edit mode
         if (this.editorManager?.mode === EditorMode.EDIT) {
-            this.editorManager.update(deltaTime);
+            this.editorManager.update(rawDeltaTime);
             return; // Skip game update in edit mode
         }
         
         if (!this.player || !this.player.isLoaded) return;
         if (this.isPaused) return;
+        
+        // Apply time dilation for juice effects
+        const deltaTime = this.physicsManager.updateTimeDilation(rawDeltaTime);
         
         // Get input
         const movementInput = this.inputManager.getMovementInput();
@@ -698,7 +770,10 @@ export class GameManager {
         // Update city LOD
         this.cityManager.updateLOD(this.player.getPosition());
         
-        // Update traffic
+        // Increment frame counter for throttling
+        this.updateFrameCount++;
+        
+        // Update traffic (every frame - needed for collisions)
         if (this.trafficManager) {
             this.trafficManager.update(deltaTime, this.player.getPosition());
             
@@ -707,20 +782,20 @@ export class GameManager {
             this.physicsManager.setCarCollisions(carCollisions);
         }
         
-        // Update drones
-        if (this.droneManager) {
-            this.droneManager.update(deltaTime, this.player.getPosition());
+        // Update drones (every 2nd frame)
+        if (this.droneManager && (this.updateFrameCount % 2 === 0)) {
+            this.droneManager.update(deltaTime * 2, this.player.getPosition());
             
-            // Pass drone collisions to physics
+            // Pass drone collisions to physics (always check collisions)
             const droneCollisions = this.droneManager.getDroneCollisions(this.player.getPosition());
             this.physicsManager.setDroneCollisions(droneCollisions);
         }
         
-        // Update pedestrians
-        if (this.pedestrianManager) {
-            this.pedestrianManager.update(deltaTime, this.player.getPosition());
+        // Update pedestrians (every 2nd frame)
+        if (this.pedestrianManager && (this.updateFrameCount % 2 === 0)) {
+            this.pedestrianManager.update(deltaTime * 2, this.player.getPosition());
             
-            // Pass pedestrian collisions to physics
+            // Pass pedestrian collisions to physics (always check collisions)
             const pedCollisions = this.pedestrianManager.getPedestrianCollisions(this.player.getPosition());
             this.physicsManager.setPedestrianCollisions(pedCollisions);
         }
@@ -738,7 +813,7 @@ export class GameManager {
         
         // Update delivery system
         if (this.deliveryManager) {
-            this.deliveryManager.update(deltaTime, this.player.getPosition());
+            this.deliveryManager.update(deltaTime, this.player.getPosition(), currentSpeed, PLAYER.MAX_SPEED);
             
             // Update delivery UI
             const deliveryState = this.deliveryManager.getState();
@@ -752,6 +827,29 @@ export class GameManager {
         if (this.minimapManager) {
             this.minimapManager.updatePlayer(this.player.getPosition(), this.player.aimYaw);
             this.minimapManager.render();
+        }
+        
+        // Update audio
+        if (this.audioManager) {
+            this.audioManager.update(
+                currentSpeed,
+                PLAYER.MAX_SPEED,
+                this.physicsManager.isGrounded,
+                this.player.getPosition().y
+            );
+        }
+        
+        // Update atmosphere (every 3rd frame)
+        if (this.atmosphereManager && (this.updateFrameCount % 3 === 0)) {
+            this.atmosphereManager.update(deltaTime * 3, this.player.getPosition());
+        }
+        
+        // Update economy tracking
+        if (this.economyManager) {
+            this.economyManager.update(deltaTime, {
+                altitude: this.player.getPosition().y,
+                speed: currentSpeed
+            });
         }
     }
 
@@ -793,6 +891,13 @@ export class GameManager {
      */
     start() {
         this.animate();
+        
+        // Show intro dialogue after a short delay
+        setTimeout(() => {
+            if (this.dialogueManager) {
+                this.dialogueManager.showIntro();
+            }
+        }, 1500);
     }
 
     /**

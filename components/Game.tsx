@@ -80,7 +80,7 @@ export default function Game() {
 
         {/* Controls Info */}
         <div id="controls-info">
-          WASD: Move | Arrows: Aim | Space: Jump | Shift: Boost/Fly | F1: Editor
+          WASD: Move | Arrows: Aim | Space: Jump | Shift: Boost/Fly | U: Upgrades | Tab: Stats | F1: Editor
         </div>
 
         {/* Minimap */}

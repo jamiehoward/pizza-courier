@@ -29,6 +29,14 @@ export class PhysicsManager {
         this.nearMissChargeBonus = 0.20;    // 20% charge per near miss
         this.nearMissCooldownTime = 1.0;    // 1 second cooldown
         
+        // Time dilation for juice
+        this.timeScale = 1.0;               // Current time scale (1.0 = normal)
+        this.targetTimeScale = 1.0;         // Target time scale for smooth transitions
+        this.timeDilationDuration = 0;      // How long to hold current dilation
+        
+        // Charge threshold tracking for particle bursts
+        this.lastChargeThreshold = 0;       // Track which threshold we last crossed
+        
         // Flight energy (consumed while flying)
         this.flyEnergy = 3.0;               // Seconds of flight
         this.flyEnergyMax = 3.0;
@@ -217,7 +225,17 @@ export class PhysicsManager {
         if (speed > PLAYER.MOVE_THRESHOLD && !this.isFullyCharged) {
             // Charge faster when moving faster
             const speedRatio = Math.min(1, speed / PLAYER.MAX_SPEED);
+            const previousCharge = this.charge;
             this.charge += this.chargeRate * speedRatio * deltaTime;
+            
+            // Check for charge threshold crossings (25%, 50%, 75%)
+            const thresholds = [0.25, 0.50, 0.75];
+            for (const threshold of thresholds) {
+                if (previousCharge < threshold && this.charge >= threshold && this.lastChargeThreshold < threshold) {
+                    this.lastChargeThreshold = threshold;
+                    this.eventBus.emit(Events.CHARGE_THRESHOLD, { threshold });
+                }
+            }
             
             // Check for full charge
             if (this.charge >= 1) {
@@ -225,6 +243,7 @@ export class PhysicsManager {
                 if (!this.isFullyCharged) {
                     this.isFullyCharged = true;
                     this.chargeUsed = false;
+                    this.lastChargeThreshold = 1;
                     this.eventBus.emit(Events.CHARGE_FULL);
                 }
             }
@@ -233,6 +252,10 @@ export class PhysicsManager {
         // Slowly lose charge when still (but not when fully charged)
         if (speed < PLAYER.MOVE_THRESHOLD && !this.isFullyCharged && this.charge > 0) {
             this.charge = Math.max(0, this.charge - 0.05 * deltaTime);
+            // Reset threshold tracking when charge drops
+            if (this.charge < 0.25) this.lastChargeThreshold = 0;
+            else if (this.charge < 0.50) this.lastChargeThreshold = 0.25;
+            else if (this.charge < 0.75) this.lastChargeThreshold = 0.50;
         }
 
         // ===== FLIGHT MECHANICS =====
@@ -477,6 +500,9 @@ export class PhysicsManager {
             z: (position.z + carCenterZ) / 2
         };
         
+        // Trigger time dilation for juice (brief slowmo)
+        this.triggerTimeDilation(0.7, 0.15);
+        
         // Emit near miss event with position for spark effects
         this.eventBus.emit(Events.NEAR_MISS, { 
             position: sparkPos,
@@ -627,5 +653,42 @@ export class PhysicsManager {
      */
     getFlightEnergyRatio() {
         return this.flyEnergy / this.flyEnergyMax;
+    }
+
+    /**
+     * Trigger time dilation effect
+     * @param {number} scale - Time scale (0.5 = half speed)
+     * @param {number} duration - How long to hold before returning to normal
+     */
+    triggerTimeDilation(scale, duration) {
+        this.targetTimeScale = scale;
+        this.timeDilationDuration = duration;
+    }
+
+    /**
+     * Update time dilation (call at start of update)
+     * @param {number} deltaTime - Raw delta time
+     * @returns {number} - Adjusted delta time
+     */
+    updateTimeDilation(deltaTime) {
+        // Smoothly interpolate time scale
+        this.timeScale = this.timeScale + (this.targetTimeScale - this.timeScale) * 0.2;
+        
+        // Count down duration
+        if (this.timeDilationDuration > 0) {
+            this.timeDilationDuration -= deltaTime;
+            if (this.timeDilationDuration <= 0) {
+                this.targetTimeScale = 1.0;
+            }
+        }
+        
+        return deltaTime * this.timeScale;
+    }
+
+    /**
+     * Get current time scale
+     */
+    getTimeScale() {
+        return this.timeScale;
     }
 }
