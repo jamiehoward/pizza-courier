@@ -74,8 +74,19 @@ export class Player {
         // Hoverboard
         this.hoverboard = new Hoverboard();
         
+        // Trick manager (set by GameManager)
+        this.trickManager = null;
+        
         // Add group to scene
         this.scene.add(this.group);
+    }
+
+    /**
+     * Set trick manager reference
+     * @param {TrickManager} trickManager - Trick manager instance
+     */
+    setTrickManager(trickManager) {
+        this.trickManager = trickManager;
     }
 
     /**
@@ -557,8 +568,11 @@ export class Player {
             this.model.rotation.x = this.leanAngle;
         }
         
-        // Update hoverboard with lean
-        this.hoverboard.update(velocity, this.aimYaw, this.leanAngle);
+        // Get trick rotation from TrickManager
+        const trickRotation = this.trickManager?.getBoardRotation() || null;
+        
+        // Update hoverboard with lean and trick rotation
+        this.hoverboard.update(velocity, this.aimYaw, this.leanAngle, trickRotation);
         
         // Update group rotation (yaw + pitch for aiming, lean for banking)
         this._updateGroupRotation();

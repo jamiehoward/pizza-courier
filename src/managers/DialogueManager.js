@@ -79,9 +79,13 @@ export class DialogueManager {
             firstDeliveryStarted: false,
         };
         
+        // Controller input tracking
+        this.lastAButtonState = false;
+        
         // Bind methods
         this._handleClick = this._handleClick.bind(this);
         this._handleKeyPress = this._handleKeyPress.bind(this);
+        this._checkControllerInput = this._checkControllerInput.bind(this);
     }
 
     /**
@@ -197,6 +201,16 @@ export class DialogueManager {
     _setupEventListeners() {
         document.addEventListener('click', this._handleClick);
         document.addEventListener('keydown', this._handleKeyPress);
+        
+        // Listen for controller input to advance dialogue
+        this.eventBus.on(Events.INPUT_DIALOGUE_ADVANCE, () => {
+            if (this.isActive) {
+                this._advanceDialogue();
+            }
+        });
+        
+        // Also check for A button held state during dialogue (in case we missed the press event)
+        this.controllerCheckInterval = setInterval(this._checkControllerInput, 50); // Check every 50ms
         
         // Game events for tutorial triggers
         this.eventBus.on(Events.PIZZA_PICKUP, () => {
@@ -424,11 +438,46 @@ export class DialogueManager {
     }
 
     /**
+     * Check controller input for dialogue advancement
+     */
+    _checkControllerInput() {
+        if (!this.isActive) {
+            this.lastAButtonState = false;
+            return;
+        }
+
+        // Check if A button is pressed on any connected gamepad
+        const gamepads = navigator.getGamepads();
+        let aButtonPressed = false;
+        
+        for (let i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            if (gamepad && gamepad.buttons && gamepad.buttons[0]) {
+                if (gamepad.buttons[0].pressed) {
+                    aButtonPressed = true;
+                    break;
+                }
+            }
+        }
+
+        // If A button was just pressed (transition from not pressed to pressed)
+        if (aButtonPressed && !this.lastAButtonState) {
+            this._advanceDialogue();
+        }
+        
+        this.lastAButtonState = aButtonPressed;
+    }
+
+    /**
      * Dispose
      */
     dispose() {
         document.removeEventListener('click', this._handleClick);
         document.removeEventListener('keydown', this._handleKeyPress);
+        
+        if (this.controllerCheckInterval) {
+            clearInterval(this.controllerCheckInterval);
+        }
         
         if (this.container && this.container.parentNode) {
             this.container.parentNode.removeChild(this.container);

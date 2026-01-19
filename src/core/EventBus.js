@@ -79,8 +79,14 @@ export class EventBus {
 export const Events = {
     // Input events
     INPUT_JUMP: 'input:jump',
+    INPUT_SPEED_BOOST: 'input:speed:boost',
+    INPUT_FLIGHT: 'input:flight',
+    INPUT_DIALOGUE_ADVANCE: 'input:dialogue:advance',
     INPUT_SHOP_TOGGLE: 'input:shop:toggle',
     INPUT_SUMMARY: 'input:summary',
+    INPUT_MENU_NAVIGATE: 'input:menu:navigate',
+    INPUT_MENU_EXIT: 'input:menu:exit',
+    INPUT_RESET_BOARD: 'input:reset:board',
     INPUT_MOVE: 'input:move',
     
     // Player events
@@ -95,6 +101,8 @@ export const Events = {
     CHARGE_FULL: 'charge:full',
     CHARGE_THRESHOLD: 'charge:threshold',
     CHARGE_BOOST_USED: 'charge:boost:used',
+    CHARGE_UPDATE: 'charge:update',
+    TRICK_CHARGE_REWARD: 'trick:charge:reward',
     NEAR_MISS: 'near:miss',
     
     // Game events
@@ -112,5 +120,11 @@ export const Events = {
     PLAYER_COLLISION: 'player:collision',
     
     // Upgrade events
-    UPGRADE_PURCHASED: 'upgrade:purchased'
+    UPGRADE_PURCHASED: 'upgrade:purchased',
+    
+    // Trick events
+    TRICK_STARTED: 'trick:started',
+    TRICK_COMPLETED: 'trick:completed',
+    TRICK_FAILED: 'trick:failed',
+    TRICK_COMBO: 'trick:combo'
 };

@@ -22,6 +22,7 @@ import { DialogueManager } from '../managers/DialogueManager.js';
 import { EconomyManager } from '../managers/EconomyManager.js';
 import { SectorManager } from '../managers/SectorManager.js';
 import { UpgradeManager } from '../managers/UpgradeManager.js';
+import { TrickManager } from '../managers/TrickManager.js';
 import { Player } from '../entities/Player.js';
 import { WORLD, LIGHTING, PLAYER, SKY } from '../constants.js';
 
@@ -71,6 +72,7 @@ export class GameManager {
         this.economyManager = null;
         this.sectorManager = null;
         this.upgradeManager = null;
+        this.trickManager = null;
         
         // Editor
         this.editorManager = null;
@@ -418,6 +420,10 @@ export class GameManager {
         this.upgradeManager.setGameManager(this);
         this.upgradeManager.init();
         
+        // Trick system
+        this.trickManager = new TrickManager(this.eventBus);
+        this.trickManager.init();
+        
         // Listen for dialogue events
         this.eventBus.on('dialogue:start', () => this.pause());
         this.eventBus.on('dialogue:end', () => this.resume());
@@ -430,9 +436,9 @@ export class GameManager {
         this.eventBus.on('shop:opened', () => this.pause());
         this.eventBus.on('shop:closed', () => this.resume());
         
-        // Shop toggle input
+        // Shop toggle input (keyboard only - controller uses menu navigation)
         this.eventBus.on(Events.INPUT_SHOP_TOGGLE, () => {
-            if (this.upgradeManager) {
+            if (this.upgradeManager && !this.inputManager.useController) {
                 if (this.upgradeManager.isOpen()) {
                     this.upgradeManager.closeShop();
                 } else {
@@ -441,14 +447,78 @@ export class GameManager {
             }
         });
         
-        // Summary toggle input
+        // Summary toggle input (keyboard only - controller uses menu navigation)
         this.eventBus.on(Events.INPUT_SUMMARY, () => {
-            if (this.economyManager) {
+            if (this.economyManager && !this.inputManager.useController) {
                 this.economyManager.showSummary();
             }
         });
         
-        // Listen for jump events (fires on spacebar release)
+        // Menu navigation (Back button - swipe between shop and summary)
+        this.eventBus.on(Events.INPUT_MENU_NAVIGATE, () => {
+            const shopOpen = this.upgradeManager?.isOpen() || false;
+            const summaryOpen = this.economyManager?.isSummaryOpen() || false;
+            
+            if (shopOpen) {
+                // Switch from shop to summary
+                this.upgradeManager.closeShop();
+                if (this.economyManager) {
+                    this.economyManager.showSummary();
+                }
+            } else if (summaryOpen) {
+                // Switch from summary to shop
+                this.economyManager.hideSummary();
+                if (this.upgradeManager) {
+                    this.upgradeManager.openShop();
+                }
+            } else {
+                // No menu open - open shop first
+                if (this.upgradeManager) {
+                    this.upgradeManager.openShop();
+                }
+            }
+        });
+        
+        // Menu exit (B button - close any open menu)
+        this.eventBus.on(Events.INPUT_MENU_EXIT, () => {
+            if (this.upgradeManager?.isOpen()) {
+                this.upgradeManager.closeShop();
+            }
+            if (this.economyManager?.isSummaryOpen()) {
+                this.economyManager.hideSummary();
+            }
+        });
+
+        // Board reset input
+        this.eventBus.on(Events.INPUT_RESET_BOARD, () => {
+            if (!this.isPaused && this.trickManager) {
+                this.trickManager.resetBoardOrientation();
+            }
+        });
+        
+        // Speed boost input (B button release on controller)
+        this.eventBus.on(Events.INPUT_SPEED_BOOST, () => {
+            // Only trigger boost if no menu is open
+            const shopOpen = this.upgradeManager?.isOpen() || false;
+            const summaryOpen = this.economyManager?.isSummaryOpen() || false;
+            
+            if (!shopOpen && !summaryOpen) {
+                this.physicsManager.useSpeedBoost(this.player.aimYaw);
+            }
+        });
+        
+        // Flight input (double-tap A when charge is full)
+        this.eventBus.on(Events.INPUT_FLIGHT, () => {
+            // Only trigger flight if no menu is open and charge is full
+            const shopOpen = this.upgradeManager?.isOpen() || false;
+            const summaryOpen = this.economyManager?.isSummaryOpen() || false;
+            
+            if (!shopOpen && !summaryOpen) {
+                this.physicsManager.startFlight();
+            }
+        });
+        
+        // Listen for jump events (fires on spacebar release or single A tap)
         this.eventBus.on(Events.INPUT_JUMP, () => {
             if (!this.isPaused && this.physicsManager.isGrounded) {
                 this.physicsManager.jump();
@@ -493,6 +563,28 @@ export class GameManager {
         this.eventBus.on(Events.CHARGE_BOOST_USED, () => {
             if (this.cameraController) {
                 this.cameraController.shake(0.5); // Strong shake for boost
+            }
+        });
+        
+        // Trick event handlers
+        this.eventBus.on(Events.TRICK_COMPLETED, (data) => {
+            // Handle trick completion (scoring will be handled by EconomyManager)
+            if (this.cameraController) {
+                this.cameraController.shake(0.15); // Subtle shake on successful trick
+            }
+        });
+        
+        this.eventBus.on(Events.TRICK_COMBO, (data) => {
+            // Handle combo tricks
+            if (this.cameraController) {
+                this.cameraController.shake(0.25); // Stronger shake for combos
+            }
+        });
+        
+        this.eventBus.on(Events.TRICK_FAILED, () => {
+            // Handle failed tricks (bail)
+            if (this.cameraController) {
+                this.cameraController.shake(0.3); // Shake on bail
             }
         });
     }
@@ -601,6 +693,11 @@ export class GameManager {
         this.player = new Player(this.scene, this.eventBus);
         await this.player.load();
         
+        // Set trick manager on player
+        if (this.trickManager) {
+            this.player.setTrickManager(this.trickManager);
+        }
+        
         // Create board glow effects attached to player
         this.effectsManager.createBoardGlow(this.player.getGroup());
     }
@@ -673,6 +770,9 @@ export class GameManager {
         // Apply time dilation for juice effects
         const deltaTime = this.physicsManager.updateTimeDilation(rawDeltaTime);
         
+        // Update input manager (polls gamepad state)
+        this.inputManager.update();
+        
         // Get input
         const movementInput = this.inputManager.getMovementInput();
         const aimInput = this.inputManager.getAimInput();
@@ -711,8 +811,10 @@ export class GameManager {
             this.momentumTimer = 0;
         }
         
-        // Handle charge boost activation (Shift key)
-        if (boostHeld && this.physicsManager.isCharged()) {
+        // Handle charge boost activation (Shift key for keyboard)
+        // Controller speed boost is handled via INPUT_SPEED_BOOST event on B button release
+        // Controller flight is handled via INPUT_FLIGHT event on double-tap A
+        if (boostHeld && !this.inputManager.useController && this.physicsManager.isCharged()) {
             this.physicsManager.useChargeBoost(spaceHeld, this.player.aimYaw);
         }
         
@@ -728,6 +830,17 @@ export class GameManager {
         
         // Update speed after physics (may have changed)
         currentSpeed = this.physicsManager.getSpeed();
+        
+        // Update trick system (when airborne - including during flight)
+        const isAirborne = !this.physicsManager.isGrounded;
+        if (this.trickManager && isAirborne) {
+            const trickInput = this.inputManager.getTrickInput();
+            this.trickManager.update(
+                deltaTime,
+                isAirborne,
+                trickInput
+            );
+        }
         
         // Update player
         const isFallingFromFlight = this.physicsManager.wasFlying && 

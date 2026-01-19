@@ -64,6 +64,19 @@ export class PhysicsManager {
         this.spatialGrid = new Map(); // Map of "x,z" -> array of building indices
         this.buildingCache = [];
         this.cacheBuilt = false;
+        
+        // Listen for trick charge rewards
+        this.eventBus.on(Events.TRICK_CHARGE_REWARD, (data) => {
+            this.charge = Math.min(1, this.charge + (data.amount || 0.05));
+            this.eventBus.emit(Events.CHARGE_UPDATE, this.charge);
+            
+            // Check if now fully charged
+            if (this.charge >= 1 && !this.isFullyCharged) {
+                this.isFullyCharged = true;
+                this.chargeUsed = false;
+                this.eventBus.emit(Events.CHARGE_FULL);
+            }
+        });
     }
 
     /**
@@ -175,7 +188,44 @@ export class PhysicsManager {
     }
 
     /**
-     * Use charge boost - called when Shift is pressed with full charge
+     * Use speed boost - B button, no charge required
+     * @param {number} aimYaw - Player's facing direction
+     */
+    useSpeedBoost(aimYaw) {
+        this.isBoosting = true;
+        const boostSpeed = PLAYER.MAX_SPEED * 3;
+        this.velocity.x = Math.sin(aimYaw) * boostSpeed;
+        this.velocity.z = Math.cos(aimYaw) * boostSpeed;
+        this.eventBus.emit(Events.CHARGE_BOOST_USED);
+        
+        // Boost ends quickly
+        setTimeout(() => {
+            this.isBoosting = false;
+        }, 300);
+        
+        return true;
+    }
+
+    /**
+     * Start flight - double-tap A when charge is full
+     */
+    startFlight() {
+        if (!this.isFullyCharged || this.chargeUsed || this.flyEnergy <= 0) {
+            return false;
+        }
+        
+        this.chargeUsed = true;
+        this.isFullyCharged = false;
+        this.charge = 0;
+        this.isFlying = true;
+        this.velocity.y = PLAYER.JUMP_VELOCITY * 1.5; // Strong upward boost
+        this.eventBus.emit(Events.PLAYER_FLIGHT_START);
+        
+        return true;
+    }
+
+    /**
+     * Use charge boost - called when Shift is pressed with full charge (keyboard only)
      * @param {boolean} isJumping - Whether player is also pressing jump
      * @param {number} aimYaw - Player's facing direction
      */

@@ -150,3 +150,13 @@ export const KEYS = {
     AIM_UP: 'ArrowUp',
     AIM_DOWN: 'ArrowDown'
 };
+
+// Controller configuration
+export const CONTROLLER = {
+    DEADZONE_LEFT: 0.15,
+    DEADZONE_RIGHT: 0.15,
+    TRIGGER_THRESHOLD: 0.3,
+    POLL_INTERVAL: 100, // ms between gamepad polls
+    XBOX_VENDOR_ID: 1118, // Microsoft vendor ID
+    XBOX_PRODUCT_ID: 654 // Xbox controller product ID (may vary)
+};

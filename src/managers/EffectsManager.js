@@ -45,6 +45,12 @@ export class EffectsManager {
         this.eventBus.on(Events.CHARGE_BOOST_USED, () => this.createBoostBurst());
         this.eventBus.on(Events.NEAR_MISS, (data) => this.createNearMissSparks(data.position));
         this.eventBus.on(Events.CHARGE_THRESHOLD, (data) => this.createChargeThresholdBurst(data.threshold));
+        
+        // Trick events
+        this.eventBus.on(Events.TRICK_STARTED, () => this.createTrickTrail());
+        this.eventBus.on(Events.TRICK_COMPLETED, (data) => this.createTrickSuccessEffect(data));
+        this.eventBus.on(Events.TRICK_COMBO, (data) => this.createComboEffect(data));
+        this.eventBus.on(Events.TRICK_FAILED, () => this.createTrickFailEffect());
     }
 
     /**
@@ -688,6 +694,147 @@ export class EffectsManager {
                 this._returnParticleToPool(particle);
                 this.trailParticles.splice(i, 1);
             }
+        }
+    }
+
+    /**
+     * Create trick trail effect (sparks during tricks)
+     */
+    createTrickTrail() {
+        // Enhanced trail particles during tricks
+        // This is handled by the existing trail particle system
+        // Just ensure particles are more visible during tricks
+    }
+
+    /**
+     * Create success effect when trick completes
+     */
+    createTrickSuccessEffect(data) {
+        const successColors = [0x00ff00, 0x00ffff, 0x88ff00, 0xffffff];
+        const glowTexture = this.createGlowTexture();
+        
+        // Create burst particles (limit to 6)
+        for (let i = 0; i < 6; i++) {
+            const color = successColors[Math.floor(Math.random() * successColors.length)];
+            const particle = this._getParticleFromPool();
+            
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 0.9;
+            
+            // Position around board
+            const angle = (i / 6) * Math.PI * 2;
+            particle.userData.offsetX = Math.cos(angle) * 0.6;
+            particle.userData.offsetY = -0.1;
+            particle.userData.offsetZ = Math.sin(angle) * 0.6;
+            
+            const size = 0.4 + Math.random() * 0.3;
+            particle.scale.set(size, size, 1);
+            
+            // Burst outward
+            particle.userData.velocity = new THREE.Vector3(
+                Math.cos(angle) * 0.1,
+                0.05 + Math.random() * 0.05,
+                Math.sin(angle) * 0.1
+            );
+            particle.userData.life = 1.0;
+            particle.userData.decay = 0.03;
+            particle.userData.baseOpacity = 0.9;
+            particle.userData.baseSize = size;
+            particle.userData.isBurst = true;
+            particle.userData.isSpark = false;
+            particle.userData.needsInitialPosition = true;
+            
+            this.scene.add(particle);
+            this.trailParticles.push(particle);
+        }
+    }
+
+    /**
+     * Create combo effect for multiple tricks
+     */
+    createComboEffect(data) {
+        const comboColors = [0xff00ff, 0x00ffff, 0xffff00, 0xff6600];
+        const glowTexture = this.createGlowTexture();
+        
+        // Create larger burst for combos (limit to 8)
+        for (let i = 0; i < 8; i++) {
+            const color = comboColors[Math.floor(Math.random() * comboColors.length)];
+            const particle = this._getParticleFromPool();
+            
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 1.0;
+            
+            // Position around board
+            const angle = (i / 8) * Math.PI * 2;
+            particle.userData.offsetX = Math.cos(angle) * 0.8;
+            particle.userData.offsetY = -0.1;
+            particle.userData.offsetZ = Math.sin(angle) * 0.8;
+            
+            const size = 0.6 + Math.random() * 0.4;
+            particle.scale.set(size, size, 1);
+            
+            // Stronger burst for combos
+            particle.userData.velocity = new THREE.Vector3(
+                Math.cos(angle) * 0.15,
+                0.1 + Math.random() * 0.1,
+                Math.sin(angle) * 0.15
+            );
+            particle.userData.life = 1.0;
+            particle.userData.decay = 0.025;
+            particle.userData.baseOpacity = 1.0;
+            particle.userData.baseSize = size;
+            particle.userData.isBurst = true;
+            particle.userData.isSpark = false;
+            particle.userData.needsInitialPosition = true;
+            
+            this.scene.add(particle);
+            this.trailParticles.push(particle);
+        }
+    }
+
+    /**
+     * Create fail effect when trick bails
+     */
+    createTrickFailEffect() {
+        const failColors = [0xff0000, 0xff3300, 0xcc0000];
+        const glowTexture = this.createGlowTexture();
+        
+        // Create small red sparks (limit to 4)
+        for (let i = 0; i < 4; i++) {
+            const color = failColors[Math.floor(Math.random() * failColors.length)];
+            const particle = this._getParticleFromPool();
+            
+            // Configure particle
+            particle.material.color.setHex(color);
+            particle.material.opacity = 0.8;
+            
+            // Position around board
+            const angle = (i / 4) * Math.PI * 2;
+            particle.userData.offsetX = Math.cos(angle) * 0.4;
+            particle.userData.offsetY = -0.1;
+            particle.userData.offsetZ = Math.sin(angle) * 0.4;
+            
+            const size = 0.2 + Math.random() * 0.2;
+            particle.scale.set(size, size, 1);
+            
+            // Small burst
+            particle.userData.velocity = new THREE.Vector3(
+                Math.cos(angle) * 0.05,
+                0.02,
+                Math.sin(angle) * 0.05
+            );
+            particle.userData.life = 0.5; // Shorter life
+            particle.userData.decay = 0.05;
+            particle.userData.baseOpacity = 0.8;
+            particle.userData.baseSize = size;
+            particle.userData.isBurst = true;
+            particle.userData.isSpark = false;
+            particle.userData.needsInitialPosition = true;
+            
+            this.scene.add(particle);
+            this.trailParticles.push(particle);
         }
     }
 }

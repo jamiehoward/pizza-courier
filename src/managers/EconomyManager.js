@@ -21,6 +21,10 @@ export class EconomyManager {
             distanceTraveled: 0,
             maxAltitude: 0,
             flightTimeTotal: 0,
+            tricksCompleted: 0,
+            tricksFailed: 0,
+            trickScore: 0,
+            bestCombo: 0,
             
             // Per delivery type
             byType: {
@@ -110,6 +114,28 @@ export class EconomyManager {
         // Near miss
         this.eventBus.on(Events.NEAR_MISS, () => {
             this.sessionStats.nearMisses++;
+        });
+        
+        // Trick completed
+        this.eventBus.on(Events.TRICK_COMPLETED, (data) => {
+            this.sessionStats.tricksCompleted++;
+            this.sessionStats.trickScore += data.score || 0;
+            
+            // Track best combo
+            if (data.isCombo && data.tricks) {
+                const comboCount = data.tricks.length;
+                if (comboCount > this.sessionStats.bestCombo) {
+                    this.sessionStats.bestCombo = comboCount;
+                }
+            }
+            
+            // Emit charge reward event (5% charge per trick)
+            this.eventBus.emit(Events.TRICK_CHARGE_REWARD, { amount: 0.05 });
+        });
+        
+        // Trick failed
+        this.eventBus.on(Events.TRICK_FAILED, () => {
+            this.sessionStats.tricksFailed++;
         });
         
         // Flight tracking
@@ -342,6 +368,13 @@ export class EconomyManager {
     hideSummary() {
         this.summaryElement.style.display = 'none';
         this.eventBus.emit('summary:hidden');
+    }
+
+    /**
+     * Check if summary is currently open
+     */
+    isSummaryOpen() {
+        return this.summaryElement && this.summaryElement.style.display === 'block';
     }
 
     /**
